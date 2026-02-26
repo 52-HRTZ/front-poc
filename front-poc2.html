@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Front Picker PoC - FIXED</title>
+</head>
+<body>
+  <h2>🎯 Testing...</h2>
+  <pre id="output" style="background:#111;color:#0f0;padding:10px;white-space:pre-wrap;"></pre>
+
+  <script>
+    // === لیسنر رو همین اول بذار (نه توی onload) ===
+    window.addEventListener("message", (e) => {
+      console.log("📨 Received:", e);
+      document.getElementById("output").textContent = 
+        "✅ Message!\nOrigin: " + e.origin + "\n\nData:\n" +
+        JSON.stringify(e.data, null, 2);
+      
+      if(e.data?.type === "google-documents-selected" && e.data.documents?.[0]) {
+        alert("🎉 SUCCESS! File: " + e.data.documents[0].name);
+      }
+    }, false);
+
+    // === کانفیگ تمیز - بدون فاصله اضافی ===
+    const config = {
+      googleAppId: "754490832836",
+      googleClientId: "754490832836-gs77odllghgisuja5jecijqihaolr08q.apps.googleusercontent.com",
+      googleOAuthScope: "https://www.googleapis.com/auth/drive.readonly",
+      googleDriveAllowedMimeTypes: "application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.folder",
+      origin: "https://github.io" // <<< دامنه خودت
+    };
+
+    // === باز کردن پاپ‌آپ ===
+    const url = `https://google-drive-picker.frontapplication.com/google-drive/index.html?config=${encodeURIComponent(JSON.stringify(config))}`;
+    console.log("🎯 Opening:", url);
+    window.open(url, "picker", "width=700,height=600");
+  </script>
+</body>
+</html>
