@@ -2,29 +2,34 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Front Picker PoC</title>
+  <title>PoC</title>
 </head>
 <body>
-  <h2>Loading Google ...</h2>
-  <h3>Received postMessage Data:</h3>
-  <pre id="output" style="background:#111;color:#0f0;padding:10px;"></pre>
+  <h3>Status: <span id="status">Waiting...</span></h3>
+  <pre id="output"></pre>
 
   <script>
-    window.onload = function() {
-      window.open(
-        "https://google-drive-picker.frontapplication.com/google-drive/index.html?config=%7B%22googleAppId%22%3A%22754490832836%22%2C%22googleClientId%22%3A%22754490832836-gs77odllghgisuja5jecijqihaolr08q.apps.googleusercontent.com%22%2C%22googleOAuthScope%22%3A%22https%3A%2F%2Fwww.googleapis.com%2Fauth/drive.readonly%22%2C%22googleDriveAllowedMimeTypes%22%3A%22application%2Fvnd.google-apps.document,application%2Fvnd.google-apps.spreadsheet,application%2Fvnd.google-apps.folder%22%2C%22origin%22%3A%22https%3A%2F%2F5github.io%22%7D",
-        "pickerPopup",
-        "width=600,height=600"
-      );
+    // Configuration
+    const PICKER_URL = "https://google-drive-picker.frontapplication.com/google-drive/index.html";
+    const MY_ORIGIN = window.location.origin;
+
+    const config = {
+      googleAppId: "754490832836",
+      googleClientId: "754490832836-gs77odllghgisuja5jecijqihaolr08q.apps.googleusercontent.com",
+      googleOAuthScope: "https://www.googleapis.com/auth/drive.readonly",
+      googleDriveAllowedMimeTypes: "application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.folder",
+      origin: MY_ORIGIN
     };
 
-    window.addEventListener("message", function(event) {
-      document.getElementById("output").textContent =
-        "Message received!\n\nOrigin: " + event.origin + "\n\nData:\n" +
-        JSON.stringify(event.data, null, 2);
-    });
+    // Listen for messages
+    window.addEventListener("message", (e) => {
+      document.getElementById("status").innerText = "Data Received";
+      document.getElementById("output").innerText = JSON.stringify(e.data, null, 2);
+    }, false);
+
+    // Open popup
+    const url = `${PICKER_URL}?config=${encodeURIComponent(JSON.stringify(config))}`;
+    window.open(url, "picker", "width=700,height=600");
   </script>
 </body>
-
 </html>
-
