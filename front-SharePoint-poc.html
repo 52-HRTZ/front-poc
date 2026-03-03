@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>SharePoint  PoC</title>
+</head>
+<body>
+  <h3>Status: <span id="status">Waiting...</span></h3>
+  <pre id="output"></pre>
+
+  <script>
+    // Configuration
+    const PICKER_URL = "https://sharepoint-picker.frontapplication.com/sharepoint/index.html";
+    const MY_ORIGIN = window.location.origin;
+
+    const config = {
+      microsoftClientId: "c9d363c6-6f98-45d0-9c0d-e754c264c496",
+      microsoftOAuthScopes: "User.Read,Files.Read.All,Sites.Read.All",
+      allowedExtensions: ["folder", ".doc", ".docx"],
+      origin: MY_ORIGIN
+
+    };
+
+    // Listen for messages
+    window.addEventListener("message", (e) => {
+      document.getElementById("status").innerText = "Data Received";
+      document.getElementById("output").innerText = JSON.stringify(e.data, null, 2);
+    }, false);
+
+    // Open popup
+    const url = `${PICKER_URL}?config=${encodeURIComponent(JSON.stringify(config))}`;
+    window.open(url, "picker", "width=700,height=600");
+  </script>
+</body>
+</html>
