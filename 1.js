@@ -1,1 +1,3 @@
-<script>alert(origin)</script>
+(function(){
+    alert(origin);
+})();
