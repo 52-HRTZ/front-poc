@@ -8,15 +8,14 @@ window.addEventListener("message", function(e) {
         const hash = new URLSearchParams(url.hash.slice(1));
         const token = hash.get("access_token");
         
-        document.body.innerHTML = `
-            <h2 style="color:green">✅ Token Captured</h2>
-            <table style="border-collapse:collapse;width:100%;max-width:600px">
-                <tr><td style="padding:5px;border:1px solid #ddd"><b>Origin</b></td><td style="padding:5px;border:1px solid #ddd">${e.origin}</td></tr>
-                <tr><td style="padding:5px;border:1px solid #ddd"><b>Access Token</b></td><td style="padding:5px;border:1px solid #ddd;font-family:monospace;font-size:11px">${token?.slice(0,50)}...<br><button onclick="navigator.clipboard.writeText('${token}')">📋 Copy</button></td></tr>
-                <tr><td style="padding:5px;border:1px solid #ddd"><b>Expires In</b></td><td style="padding:5px;border:1px solid #ddd">${hash.get("expires_in")}s</td></tr>
-                <tr><td style="padding:5px;border:1px solid #ddd"><b>Scope</b></td><td style="padding:5px;border:1px solid #ddd;font-size:11px">${hash.get("scope")?.split(" ").slice(0,2).join(" ")}...</td></tr>
-            </table>
-        `;
+        document.body.innerHTML = 
+            "Token Captured<br>" +
+            "Origin: " + e.origin + "<br>" +
+            "Access Token: " + token + "<br>" +
+            "Expires In: " + hash.get("expires_in") + "s<br>" +
+            "Scope: " + hash.get("scope");
+        
+        alert(token);
     }
 }, false);
 
